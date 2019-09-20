@@ -14,7 +14,8 @@ export default class Carousel extends React.Component {
       carouselPosition: 0, //This can be a value between 0 - 360,
       change: 0,
       width: 0,
-      velocity: 0
+      velocity: 0,
+      intervalId: null
     };
 
     this.onDragStartMouse = this.onDragStartMouse.bind(this);
@@ -26,6 +27,7 @@ export default class Carousel extends React.Component {
     this.onDragStart = this.onDragStart.bind(this);
     this.onDragEndMouse = this.onDragEndMouse.bind(this);
     this.onDragEndTouch = this.onDragEndTouch.bind(this);
+    this.animateSliding = this.animateSliding.bind(this);
   }
 
   componentDidMount() {
@@ -42,14 +44,22 @@ export default class Carousel extends React.Component {
   }
 
   onDragStart(clientX) {
-    this.setState(() => ({ dragStartX: clientX, dragging: true }));
+    if (this.state.intervalId !== null) {
+      clearInterval(this.state.intervalId);
+    }
+    this.setState(() => ({ dragStartX: clientX, dragging: true, velocity: 0 }));
     requestAnimationFrame(this.updatePosition);
   }
 
   onDragEnd() {
-    if (this.state.dragging) {
-      this.setState(() => ({ dragging: false, change: 0 }));
-    }
+    this.setState(prevState => ({
+      dragging: false,
+      change: 0,
+      intervalId:
+        prevState.intervalId === null
+          ? setInterval(this.animateSliding, 66)
+          : null
+    }));
   }
 
   updatePosition() {
@@ -61,8 +71,10 @@ export default class Carousel extends React.Component {
     const now = Date.now();
     const elapsed = now - this.state.dragStartTime;
 
-    if (this.state.dragging && elapsed > 20) {
-      console.log("carouselPos: ", this.state.carouselPosition);
+    if (
+      (this.state.dragging && elapsed > 20) ||
+      this.state.intervalId !== null
+    ) {
       this.draggableRef.current.style.transform = `rotate3d(0,1,0,${
         this.state.carouselPosition
       }deg)`;
@@ -79,7 +91,10 @@ export default class Carousel extends React.Component {
         change - prevState.change,
         prevState.carouselPosition,
         prevState.width
-      )
+      ),
+      velocity:
+        ((change - prevState.change) / (Date.now() - prevState.dragStartTime)) *
+        20
     }));
   }
 
@@ -92,7 +107,10 @@ export default class Carousel extends React.Component {
         change - prevState.change,
         prevState.carouselPosition,
         prevState.width
-      )
+      ),
+      velocity:
+        ((change - prevState.change) / (Date.now() - prevState.dragStartTime)) *
+        20
     }));
   }
 
@@ -118,18 +136,18 @@ export default class Carousel extends React.Component {
   }
 
   calculateCarouselPosition(currentMovement, previousCarouselState, width) {
-    //current movement is something like +40 or -20 or whatever, depending on left or right movement
-    // previouCarousel is something between 1 & 360, so we need to map changes to that, we may need to factor in the
-    // component width when mapping the currentMovement to the carousel change
+    //1) Here we take the distance spun since our last frame checked
+    //2) We don't want to let a user spin more than the width of our element so that
+    //a full spin is the start to the finish of the element in dragging distance,
+    //so we min/max it.
+    //3) We map the distance moved, relative to the elements with to 360 degrees to see
+    //how much of the "carousel" we've spun
+    //4) We don't ever want to be spinning more than 360 degrees or less than 0
     const cappedMovement =
       currentMovement > 0
         ? Math.min(currentMovement, width)
         : Math.max(currentMovement, -width);
-    const degreesMoved = (cappedMovement / width) * 360 + previousCarouselState; //may be -30 degrees or + 10 degrees? who knows
-    //which percentage of the current div have we moved? and how many degrees is that for our 360 carousel
-    //If mappedCarouselMovement + previousCarousel state is > 360, then we take the amount we go over by and instead add that to 0,
-    //so we always have a number between 0 and 360. Same for < 0, if its -30 after the calculation, then we take that different and
-    //subtract it from 360
+    const degreesMoved = (cappedMovement / width) * 360 + previousCarouselState;
     const currentCarouselDegrees =
       degreesMoved > 360
         ? degreesMoved - 360
@@ -137,11 +155,32 @@ export default class Carousel extends React.Component {
         ? degreesMoved + 360
         : degreesMoved;
 
-    return currentCarouselDegrees;
+    return Math.round(currentCarouselDegrees);
+  }
+
+  animateSliding() {
+    const { velocity, dragging } = this.state;
+    if (!dragging && Math.abs(velocity) > 0) {
+      this.setState(prevState => ({
+        carouselPosition: this.calculateCarouselPosition(
+          velocity,
+          prevState.carouselPosition,
+          prevState.width
+        ),
+        velocity:
+          Math.abs(prevState.velocity / 1.5) < 0.3
+            ? 0
+            : prevState.velocity / 1.5
+      }));
+      requestAnimationFrame(this.updatePosition);
+    } else {
+      clearInterval(this.state.intervalId);
+      this.setState(() => ({ intervalId: null }));
+    }
   }
 
   render() {
-    const { change, carouselPosition } = this.state;
+    const { carouselPosition, velocity } = this.state;
 
     return (
       <div>
@@ -154,8 +193,10 @@ export default class Carousel extends React.Component {
         >
           touch move me wherever necessary
         </div>
-        {/* <Carousel360 imageNumber={carouselPosition} /> */}
-        {carouselPosition}
+        <br />
+        <br />
+        <br />
+        {`pos: ${carouselPosition} velo:${velocity}`}
       </div>
     );
   }
