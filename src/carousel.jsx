@@ -1,7 +1,133 @@
-import React from "react";
+import React, { useState, useRef, useEffect, useReducer } from "react";
 import "./styles.css";
 
-export default class Carousel extends React.Component {
+//A hook for getting the previous state/a previous value, if needed
+const usePrevious = value => {
+  const ref = useRef();
+  useEffect(() => {
+    ref.current = value;
+  });
+  return ref.current;
+};
+
+const useWidth = ref => {
+  console.log("called useWidth");
+  const [width, setWidth] = useState(0);
+  useEffect(() => {
+    setWidth(ref.current.getBoundingClientRect().width);
+  }, [ref]);
+};
+
+const telemetryReducer = (state, action) => {
+  switch (action.type) {
+    case "user_move":
+      return {
+        angle: action.angle,
+        change: action.change,
+        velocity: action.velocity
+      };
+    case "decay_move":
+      return {
+        ...state,
+        angle: action.angle,
+        velocity: action.velocity
+      };
+    case "reset_change":
+      return {
+        ...state,
+        change: 0
+      };
+    case "reset_velocity":
+      return { ...state, velocity: 0 };
+
+    default:
+      return state;
+  }
+};
+
+const Carousel2 = () => {
+  const [dragState, setDragState] = useState({
+    dragging: false,
+    dragStartX: 0,
+    dragStartTime: 0
+  });
+  const [carouselTelemetry, dispatch] = useReducer(telemetryReducer, {
+    angle: 0,
+    change: 0,
+    velocity: 0
+  });
+  const [decayInterval, setDecayInterval] = useState(null);
+  const draggableRef = useRef();
+  const width = useWidth(draggableRef);
+
+  useEffect(() => {
+    window.addEventListener("mouseup", onDragEndMouse);
+    window.addEventListener("touchend", onDragEndTouch);
+
+    return () => {
+      window.removeEventListener("mouseup", onDragEndMouse);
+      window.removeEventListener("touchend", onDragEndTouch);
+    };
+  }, []);
+
+  const onDragEndMouse = e => {
+    window.removeEventListener("mousemove", this.onMouseMove);
+    onDragEnd();
+  };
+
+  const onDragEndTouch = e => {
+    window.removeEventListener("touchmove", this.onTouchMove);
+    onDragEnd();
+  };
+
+  const onDragStartMouse = e => {
+    onDragStart(e.clientX);
+    window.addEventListener("mousemove", this.onMouseMove);
+  };
+
+  const onDragStartTouch = e => {
+    const touch = e.targetTouches[0];
+    onDragStart(touch.clientX);
+    window.addEventListener("touchmove", this.onTouchMove);
+  };
+
+  const onDragStart = clientX => {
+    if (decayInterval !== null) {
+      clearInterval(decayInterval);
+    }
+    setDragState({ dragStartX: clientX, dragging: true, velocity: 0 });
+    requestAnimationFrame(updatePosition);
+  };
+
+  const onDragEnd = () => {
+    setDragState(state => ({ ...state, change: 0, dragging: false }));
+    setDecayInterval(state =>
+      state === null ? setInterval(animateSliding, 66) : null
+    );
+  };
+
+  return (
+    <div>
+      <h1>Spin the text below!</h1>
+      <div
+        ref={this.draggableRef}
+        onMouseDown={onDragStartMouse}
+        onTouchStart={onDragStartTouch}
+        className="spinText"
+      >
+        touch move me wherever necessary
+      </div>
+      <br />
+      <br />
+      <br />
+      <span>
+        {`pos: ${carouselTelemetry.angle} velo:${carouselTelemetry.velocity}`}
+      </span>
+    </div>
+  );
+};
+
+class Carousel extends React.Component {
   constructor(props) {
     super(props);
 
@@ -13,8 +139,8 @@ export default class Carousel extends React.Component {
       dragStartTime: 0,
       carouselPosition: 0, //This can be a value between 0 - 360,
       change: 0,
-      width: 0,
       velocity: 0,
+      width: 0,
       intervalId: null
     };
 
@@ -201,3 +327,5 @@ export default class Carousel extends React.Component {
     );
   }
 }
+
+export default Carousel;
