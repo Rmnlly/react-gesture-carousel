@@ -1,22 +1,27 @@
-import React, { useState, useRef, useEffect, useReducer } from "react";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useReducer,
+  useCallback
+} from "react";
 import "./styles.css";
 
 //A hook for getting the previous state/a previous value, if needed
-const usePrevious = value => {
-  const ref = useRef();
-  useEffect(() => {
-    ref.current = value;
-  });
-  return ref.current;
-};
+// const usePrevious = value => {
+//   const ref = useRef();
+//   useEffect(() => {
+//     ref.current = value;
+//   });
+//   return ref.current;
+// };
 
 const useWidth = ref => {
-  console.log("called useWidth");
   const [width, setWidth] = useState(0);
   useEffect(() => {
     setWidth(ref.current.getBoundingClientRect().width);
   }, [ref]);
-  return [width, setWidth];
+  return width;
 };
 
 const telemetryReducer = (state, action) => {
@@ -93,13 +98,73 @@ const Carousel2 = () => {
   });
   const [decayInterval, setDecayInterval] = useState(null);
 
+  //Probably needs to be in a useEffect()
+  const updatePosition = useCallback(() => {
+    if (dragState.dragging) requestAnimationFrame(updatePosition);
+
+    const now = Date.now();
+    const elapsed = now - dragState.dragStartTime;
+
+    if ((dragState.dragging && elapsed > 20) || decayInterval !== null) {
+      draggableRef.current.style.transform = `rotate3d(0,1,0,${
+        carouselTelemetry.angle
+      }deg)`;
+      setDragState(state => ({ ...state, dragStartTime: Date.now() }));
+    }
+  }, [
+    dragState.dragging,
+    dragState.dragStartTime,
+    carouselTelemetry.angle,
+    decayInterval,
+    setDragState
+  ]);
+
+  const animateSliding = useCallback(() => {
+    const { velocity } = carouselTelemetry;
+    const { dragging } = dragState;
+    if (!dragging && Math.abs(velocity) > 0) {
+      dispatch({ type: "decay_move", velocity });
+      requestAnimationFrame(updatePosition);
+    } else {
+      clearInterval(decayInterval);
+      setDecayInterval(null);
+    }
+  }, [carouselTelemetry, dragState, decayInterval, updatePosition]);
+
+  const onDragEnd = useCallback(() => {
+    setDragState(state => ({ ...state, change: 0, dragging: false }));
+    setDecayInterval(state =>
+      state === null ? setInterval(animateSliding, 66) : null
+    );
+  }, [animateSliding]);
+
+  const onMouseMove = useCallback(
+    e => {
+      const change = e.clientX - dragState.dragStartX;
+      dispatch({
+        type: "user_move",
+        change,
+        startTime: dragState.dragStartTime
+      });
+    },
+    [dragState.dragStartTime, dragState.dragStartX]
+  );
+
+  const onTouchMove = useCallback(
+    e => {
+      const touch = e.targetTouches[0];
+      const change = touch.clientX - this.state.dragStartX;
+
+      dispatch({
+        type: "user_move",
+        change,
+        startTime: dragState.dragStartTime
+      });
+    },
+    [dragState.dragStartTime]
+  );
+
   useEffect(() => {
-    const onDragEnd = () => {
-      setDragState(state => ({ ...state, change: 0, dragging: false }));
-      setDecayInterval(state =>
-        state === null ? setInterval(animateSliding, 66) : null
-      );
-    };
 
     const onDragEndMouse = e => {
       window.removeEventListener("mousemove", onMouseMove);
@@ -118,7 +183,8 @@ const Carousel2 = () => {
       window.removeEventListener("mouseup", onDragEndMouse);
       window.removeEventListener("touchend", onDragEndTouch);
     };
-  }, []);
+
+  }, [onDragEnd, onMouseMove, onTouchMove]);
 
   const onDragStartMouse = e => {
     onDragStart(e.clientX);
@@ -138,54 +204,7 @@ const Carousel2 = () => {
     setDragState({ dragStartX: clientX, dragging: true, velocity: 0 });
     requestAnimationFrame(updatePosition);
   };
-
-  const onMouseMove = e => {
-    const change = e.clientX - dragState.dragStartX;
-    dispatch({
-      type: "user_move",
-      change,
-      startTime: dragState.dragStartTime
-    });
-  };
-
-  const onTouchMove = e => {
-    const touch = e.targetTouches[0];
-    const change = touch.clientX - this.state.dragStartX;
-
-    dispatch({
-      type: "user_move",
-      change,
-      startTime: dragState.dragStartTime
-    });
-  };
-
-  //Probably needs to be in a useEffect()
-  const updatePosition = () => {
-    if (dragState.dragging) requestAnimationFrame(updatePosition);
-
-    const now = Date.now();
-    const elapsed = now - dragState.dragStartTime;
-
-    if ((dragState.dragging && elapsed > 20) || decayInterval !== null) {
-      draggableRef.current.style.transform = `rotate3d(0,1,0,${
-        carouselTelemetry.angle
-      }deg)`;
-      setDragState(state => ({ ...state, dragStartTime: Date.now() }));
-    }
-  };
-
-  const animateSliding = () => {
-    const { velocity } = carouselTelemetry;
-    const { dragging } = dragState;
-    if (!dragging && Math.abs(velocity) > 0) {
-      dispatch({ type: "decay_move", velocity });
-      requestAnimationFrame(updatePosition);
-    } else {
-      clearInterval(decayInterval);
-      setDecayInterval(null);
-    }
-  };
-
+  
   return (
     <div>
       <h1>Spin the text below!</h1>
