@@ -165,6 +165,7 @@ const Carousel2 = () => {
   );
 
   useEffect(() => {
+
     const onDragEndMouse = e => {
       window.removeEventListener("mousemove", onMouseMove);
       onDragEnd();
@@ -182,6 +183,7 @@ const Carousel2 = () => {
       window.removeEventListener("mouseup", onDragEndMouse);
       window.removeEventListener("touchend", onDragEndTouch);
     };
+
   }, [onDragEnd, onMouseMove, onTouchMove]);
 
   const onDragStartMouse = e => {
@@ -202,7 +204,7 @@ const Carousel2 = () => {
     setDragState({ dragStartX: clientX, dragging: true, velocity: 0 });
     requestAnimationFrame(updatePosition);
   };
-
+  
   return (
     <div>
       <h1>Spin the text below!</h1>
